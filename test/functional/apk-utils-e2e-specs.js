@@ -4,9 +4,10 @@ import ADB from '../..';
 import path from 'path';
 import { rootDir } from '../../lib/helpers.js';
 import { retryInterval } from 'asyncbox';
-import { MOCHA_TIMEOUT } from './setup';
+import { MOCHA_TIMEOUT, apiLevel } from './setup';
 
-const waitDuration = 60000;
+const START_APP_WAIT_DURATION = 60000;
+const START_APP_WAIT_DURATION_FAIL = 10000;
 
 chai.should();
 chai.use(chaiAsPromised);
@@ -28,7 +29,7 @@ describe('apk utils', function () {
 
   before(async function () {
     adb = await ADB.createADB({
-      adbExecTimeout: process.env.TRAVIS ? 60000 : 40000,
+      adbExecTimeout: (process.env.TRAVIS || process.env.CI) ? 60000 : 40000,
     });
   });
   it('should be able to check status of third party app', async function () {
@@ -47,13 +48,16 @@ describe('apk utils', function () {
   });
   describe('startUri', function () {
     it('should be able to start a uri', async function () {
+      if (apiLevel < 23) {
+        return this.skip();
+      }
       await adb.goToHome();
       let res = await adb.getFocusedPackageAndActivity();
       res.appPackage.should.not.equal('com.android.contacts');
       await adb.install(contactManagerPath);
       await adb.startUri('content://contacts/people', 'com.android.contacts');
       await retryInterval(10, 500, async () => {
-        res = await adb.shell(['dumpsys', 'window', 'windows']);
+        res = await adb.dumpWindows();
         // depending on apilevel, app might show up as active in one of these
         // two dumpsys output formats
         let focusRe1 = '(mCurrentFocus.+\\.PeopleActivity)';
@@ -69,7 +73,7 @@ describe('apk utils', function () {
       await adb.startApp({
         pkg: 'com.example.android.contactmanager',
         activity: 'ContactManager',
-        waitDuration: 60000,
+        waitDuration: START_APP_WAIT_DURATION,
       });
       await assertPackageAndActivity();
 
@@ -79,6 +83,7 @@ describe('apk utils', function () {
       await adb.startApp({
         pkg: 'com.example.android.contactmanager',
         activity: 'ContactManage',
+        waitDuration: START_APP_WAIT_DURATION_FAIL,
       }).should.eventually.be.rejectedWith('Activity');
     });
     it('should throw error for wrong wait activity', async function () {
@@ -87,7 +92,7 @@ describe('apk utils', function () {
         pkg: 'com.example.android.contactmanager',
         activity: 'ContactManager',
         waitActivity: 'foo',
-        waitDuration: 1000,
+        waitDuration: START_APP_WAIT_DURATION_FAIL,
       }).should.eventually.be.rejectedWith('foo');
     });
     it('should start activity with wait activity', async function () {
@@ -96,7 +101,7 @@ describe('apk utils', function () {
         pkg: 'com.example.android.contactmanager',
         activity: 'ContactManager',
         waitActivity: '.ContactManager',
-        waitDuration,
+        waitDuration: START_APP_WAIT_DURATION,
       });
       await assertPackageAndActivity();
     });
@@ -106,7 +111,7 @@ describe('apk utils', function () {
         pkg: 'com.example.android.contactmanager',
         activity: 'ContactManager',
         waitActivity: '*',
-        waitDuration,
+        waitDuration: START_APP_WAIT_DURATION,
       });
       await assertPackageAndActivity();
     });
@@ -116,7 +121,7 @@ describe('apk utils', function () {
         pkg: 'com.example.android.contactmanager',
         activity: 'ContactManager',
         waitActivity: '*.ContactManager',
-        waitDuration,
+        waitDuration: START_APP_WAIT_DURATION,
       });
       await assertPackageAndActivity();
     });
@@ -126,6 +131,7 @@ describe('apk utils', function () {
         pkg: 'com.example.android.contactmanager',
         activity: 'SuperManager',
         waitActivity: '*.ContactManager',
+        waitDuration: START_APP_WAIT_DURATION_FAIL,
       }).should.eventually.be.rejectedWith('Activity');
     });
     it('should throw error for wrong wait activity which contains wildcard', async function () {
@@ -134,6 +140,7 @@ describe('apk utils', function () {
         pkg: 'com.example.android.contactmanager',
         activity: 'ContactManager',
         waitActivity: '*.SuperManager',
+        waitDuration: START_APP_WAIT_DURATION_FAIL,
       }).should.eventually.be.rejectedWith('SuperManager');
     });
     it('should start activity with comma separated wait packages list', async function () {
@@ -143,7 +150,7 @@ describe('apk utils', function () {
         waitPkg: 'com.android.settings, com.example.android.contactmanager',
         activity: 'ContactManager',
         waitActivity: '.ContactManager',
-        waitDuration,
+        waitDuration: START_APP_WAIT_DURATION,
       });
       await assertPackageAndActivity();
     });
@@ -154,6 +161,7 @@ describe('apk utils', function () {
         waitPkg: 'com.android.settings, com.example.somethingelse',
         activity: 'SuperManager',
         waitActivity: '*.ContactManager',
+        waitDuration: START_APP_WAIT_DURATION_FAIL,
       }).should.eventually.be.rejectedWith('Activity');
     });
   });
@@ -162,18 +170,21 @@ describe('apk utils', function () {
     await adb.startApp({
       pkg: 'com.android.settings',
       activity: '.Settings$NotificationAppListActivity',
-      waitDuration,
+      waitDuration: START_APP_WAIT_DURATION,
     });
     let {appPackage, appActivity} = await adb.getFocusedPackageAndActivity();
     appPackage.should.equal('com.android.settings');
     appActivity.should.equal('.Settings$NotificationAppListActivity');
   });
   it('getFocusedPackageAndActivity should be able get package and activity', async function () {
+    // The test sometimes fails due to Emulator slowness on Travis
+    this.retries(2);
+
     await adb.install(contactManagerPath);
     await adb.startApp({
       pkg: 'com.example.android.contactmanager',
       activity: 'ContactManager',
-      waitDuration,
+      waitDuration: START_APP_WAIT_DURATION,
     });
     await assertPackageAndActivity();
   });

@@ -26,7 +26,7 @@ describe('System calls', function () {
     devices.should.have.length.above(0);
   });
   it('adbExec should get devices when with devices', async function () {
-    (await adb.adbExec("devices")).should.contain("List of devices attached");
+    (await adb.adbExec('devices')).should.contain('List of devices attached');
   });
   it('isDeviceConnected should be true', async function () {
     (await adb.isDeviceConnected()).should.be.true;
@@ -59,8 +59,12 @@ describe('System calls', function () {
       return this.skip();
     }
     this.timeout(MOCHA_LONG_TIMEOUT);
-    await adb.reboot(process.env.TRAVIS ? 200 : undefined);
-    await adb.ping();
+    try {
+      await adb.reboot();
+      await adb.ping();
+    } catch (e) {
+      e.message.should.include('must be root');
+    }
   });
   it('fileExists should detect when files do and do not exist', async function () {
     (await adb.fileExists('/foo/bar/baz.zip')).should.be.false;

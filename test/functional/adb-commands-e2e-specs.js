@@ -12,9 +12,10 @@ chai.should();
 chai.use(chaiAsPromised);
 let expect = chai.expect;
 
-// change according to CI
-const IME = 'com.example.android.softkeyboard/.SoftKeyboard',
-      defaultIMEs = [
+
+const IME = apiLevel >= 28 ? 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME' :
+  'com.example.android.softkeyboard/.SoftKeyboard';
+const defaultIMEs = [
         'com.android.inputmethod.latin/.LatinIME',
         'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME',
         'io.appium.android.ime/.UnicodeIME',
@@ -28,6 +29,7 @@ describe('adb commands', function () {
   this.timeout(MOCHA_TIMEOUT);
 
   let adb;
+  const androidInstallTimeout = 90000;
   before(async function () {
     adb = await ADB.createADB({ adbExecTimeout: 60000 });
   });
@@ -35,7 +37,8 @@ describe('adb commands', function () {
     (await adb.getApiLevel()).should.equal(apiLevel);
   });
   it('getPlatformVersion should get correct platform version', async function () {
-    (await adb.getPlatformVersion()).should.include(platformVersion);
+    const actualPlatformVersion = await adb.getPlatformVersion();
+    parseFloat(platformVersion).should.equal(parseFloat(actualPlatformVersion));
   });
   it('availableIMEs should get list of available IMEs', async function () {
     (await adb.availableIMEs()).should.have.length.above(0);
@@ -49,7 +52,7 @@ describe('adb commands', function () {
       defaultIMEs.should.include(defaultIME);
     }
   });
-  it('enableIME and disableIME should enable and disble IME', async function () {
+  it('enableIME and disableIME should enable and disable IME', async function () {
     await adb.disableIME(IME);
     (await adb.enabledIMEs()).should.not.include(IME);
     await adb.enableIME(IME);
@@ -70,13 +73,13 @@ describe('adb commands', function () {
     (await adb.getPIDsByName('com.android.phone')).should.have.length.above(0);
   });
   it('killProcessesByName should kill process', async function () {
-    await adb.install(contactManagerPath);
+    await adb.install(contactManagerPath, {timeout: androidInstallTimeout});
     await adb.startApp({pkg, activity});
     await adb.killProcessesByName(pkg);
     (await adb.getPIDsByName(pkg)).should.have.length(0);
   });
   it('killProcessByPID should kill process', async function () {
-    await adb.install(contactManagerPath);
+    await adb.install(contactManagerPath, {timeout: androidInstallTimeout});
     await adb.startApp({pkg, activity});
     let pids = await adb.getPIDsByName(pkg);
     pids.should.have.length.above(0);
@@ -85,7 +88,7 @@ describe('adb commands', function () {
   });
   it('should get device language and country', async function () {
     if (parseInt(apiLevel, 10) >= 23) return this.skip(); // eslint-disable-line curly
-    if (process.env.TRAVIS) return this.skip(); // eslint-disable-line curly
+    if (process.env.TRAVIS || process.env.CI) return this.skip(); // eslint-disable-line curly
 
     ['en', 'fr'].should.contain(await adb.getDeviceSysLanguage());
     ['US', 'EN_US', 'EN', 'FR'].should.contain(await adb.getDeviceSysCountry());
@@ -104,6 +107,16 @@ describe('adb commands', function () {
     (await adb.adbExec([`forward`, `--list`])).should.contain('tcp:8200');
     await adb.removePortForward(8200);
     (await adb.adbExec([`forward`, `--list`])).should.not.contain('tcp:8200');
+
+  });
+  it('should reverse forward the port', async function () {
+    await adb.reversePort(4724, 4724);
+  });
+  it('should remove reverse forwarded port', async function () {
+    await adb.reversePort(6790, 8200);
+    (await adb.adbExec([`reverse`, `--list`])).should.contain('tcp:6790');
+    await adb.removePortReverse(6790);
+    (await adb.adbExec([`reverse`, `--list`])).should.not.contain('tcp:6790');
 
   });
   it('should start logcat from adb', async function () {
@@ -185,7 +198,7 @@ describe('adb commands', function () {
     it('should install and grant all permission', async function () {
       let apiDemos = path.resolve(rootDir, 'test',
           'fixtures', 'ApiDemos-debug.apk');
-      await adb.install(apiDemos);
+      await adb.install(apiDemos, {timeout: androidInstallTimeout});
       (await adb.isAppInstalled('io.appium.android.apis')).should.be.true;
       await adb.grantAllPermissions('io.appium.android.apis');
       let requestedPermissions = await adb.getReqPermissions('io.appium.android.apis');
@@ -236,9 +249,7 @@ describe('adb commands', function () {
       remoteData.toString().should.equal(stringData);
     });
     it('should throw error if it cannot write to the remote file', async function () {
-      let remoteFile = '/foo/bar/remote.txt';
-
-      await adb.push(localFile, remoteFile).should.be.rejectedWith(/\/foo\/bar\/remote.txt/);
+      await adb.push(localFile, '/foo/bar/remote.txt').should.be.rejectedWith(/\/foo/);
     });
   });
 
@@ -248,6 +259,8 @@ describe('adb commands', function () {
         // skip the test on CI, since it takes a lot of time
         return this.skip;
       }
+      const BUG_REPORT_TIMEOUT = 2 * 60 * 1000; // 2 minutes
+      this.timeout(BUG_REPORT_TIMEOUT);
       (await adb.bugreport()).should.be.a('string');
     });
   });
