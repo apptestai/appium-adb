@@ -4,8 +4,8 @@ import * as teen_process from 'teen_process';
 import { fs } from 'appium-support';
 import ADB from '../..';
 import { withMocks } from 'appium-test-support';
-import path from 'path';
 import _ from 'lodash';
+import B from 'bluebird';
 import { REMOTE_CACHE_ROOT } from '../../lib/tools/apk-utils';
 import apksUtilsMethods from '../../lib/tools/apks-utils';
 
@@ -62,136 +62,6 @@ describe('Apk-utils', withMocks({adb, fs, teen_process}, function (mocks) {
         .returns(`Dexopt state:
           Unable to find package: ${pkg}`);
       (await adb.isAppInstalled(pkg)).should.be.false;
-    });
-  });
-  describe('extractStringsFromApk', function () {
-    it('should fallback to default if en locale is not present in the config', async function () {
-      mocks.teen_process.expects('exec').onCall(0)
-      .returns({stdout: `
-      Package Groups (1)
-      Package Group 0 id=0x7f packageCount=1 name=io.appium.android.apis
-      Package 0 id=0x7f name=io.appium.android.apis
-        type 0 configCount=1 entryCount=6
-          config (default):
-            resource 0x7f0c0215 io.appium.android.apis:string/linear_layout_8_vertical: t=0x03 d=0x0000044c (s=0x0008 r=0x00)
-              (string16) "Vertical"
-            resource 0x7f0c0216 io.appium.android.apis:string/linear_layout_8_horizontal: t=0x03 d=0x0000044d (s=0x0008 r=0x00)
-              (string16) "Horizontal"
-          config fr:
-            resource 0x7f0c0215 io.appium.android.apis:string/linear_layout_8_vertical: t=0x03 d=0x0000044c (s=0x0008 r=0x00)
-              (string16) "Vertical"
-            resource 0x7f0c0216 io.appium.android.apis:string/linear_layout_8_horizontal: t=0x03 d=0x0000044d (s=0x0008 r=0x00)
-              (string16) "Horizontal"
-      `});
-      mocks.teen_process.expects('exec')
-      .returns({stdout: `
-      nodpi-v4
-
-      xlarge-v4
-      v9
-      v11
-      v12
-      v13
-      w600dp-v13
-      w720dp-v13
-      w1024dp-v13
-      h550dp-v13
-      h670dp-v13
-      h974dp-v13
-      sw480dp-v13
-      sw600dp-v13
-      sw720dp-v13
-      v14
-      v16
-      v17
-      land
-      land-v13
-      ldpi-v4
-      mdpi-v4
-      hdpi-v4
-      xhdpi-v4
-      fr
-      `});
-      mocks.fs.expects('writeFile').once();
-      const {apkStrings, localPath} = await adb.extractStringsFromApk('/fake/path.apk', 'en', '/tmp');
-      apkStrings.linear_layout_8_horizontal.should.eql('Horizontal');
-      localPath.should.eql(path.resolve('/tmp', 'strings.json'));
-    });
-    it('should properly parse aapt output', async function () {
-      mocks.teen_process.expects('exec').once()
-        .returns({stdout: `
-        Package Groups (1)
-        Package Group 0 id=0x7f packageCount=1 name=io.appium.test
-          Package 0 id=0x7f name=io.appium.test
-            type 0 configCount=1 entryCount=685
-              spec resource 0x7f010000 io.appium.test:attr/audioMessageDuration: flags=0x00000000
-              spec resource 0x7f010001 io.appium.test:attr/callingChatheadFooter: flags=0x00000000
-              spec resource 0x7f010002 io.appium.test:attr/callingChatheadInitials: flags=0x00000000
-              spec resource 0x7f010003 io.appium.test:attr/callingControlButtonLabel: flags=0x00000000
-              spec resource 0x7f010004 io.appium.test:attr/circleRadius: flags=0x00000000
-              config de-rDE:
-                resource 0x7f010000 io.appium.test:attr/audioMessageDuration: <bag>
-                  Parent=0x00000000(Resolved=0x7f000000), Count=1
-                  #0 (Key=0x01000000): (color) #00000001
-                resource 0x7f010001 io.appium.test:attr/callingChatheadFooter: <bag>
-                  Parent=0x00000000(Resolved=0x7f000000), Count=1
-                  #0 (Key=0x01000000): (color) #00000001
-              config de-rDE:
-                resource 0x7f080000 io.appium.test:string/abc_action_bar_home_description: t=0x03 d=0x00000c27 (s=0x0008 r=0x00)
-                  (string8) "Navigate \\"home\\""
-                resource 0x7f080001 io.appium.test:string/abc_action_bar_home_description_format: t=0x03 d=0x00000ad1 (s=0x0008 r=0x00)
-                  (string8) "%1$s, %2$s"
-                resource 0x7f080002 io.appium.test:string/abc_action_bar_home_subtitle_description_format: t=0x03 d=0x00000ad0 (s=0x0008 r=0x00)
-                  (string8) "%1$s, %2$s, %3$s"
-            type 1 configCount=1 entryCount=685
-              config de-rDE:
-                resource 0x7f0a0000 io.appium.test:plurals/calling__conversation_full__message: <bag>
-                  Parent=0x00000000(Resolved=0x7f000000), Count=2
-                  #0 (Key=0x01000004): (string8) "Calls work in conversations with up to 1 person."
-                  #1 (Key=0x01000005): (string8) "Calls work in conversations with up to %1$d people. \\"blabla\\""
-                resource 0x7f0a0001 io.appium.test:plurals/calling__voice_channel_full__message: <bag>
-                  Parent=0x00000000(Resolved=0x7f000000), Count=6
-                  #0 (Key=0x01000004): (string8) "There's only room for %1$d people in here."
-                  #1 (Key=0x01000005): (string8) "There's only room for %1$d people in here."
-                  #2 (Key=0x01000006): (string8) "There's only room for %1$d people in here."
-                  #3 (Key=0x01000007): (string8) "There's only room for %1$d people in here."
-                  #4 (Key=0x01000008): (string8) "There's only room for %1$d people in here."
-                  #5 (Key=0x01000009): (string8) "There's only room for %1$d people in here."
-            type 16 configCount=1 entryCount=8
-              spec resource 0x7f110000 io.appium.test:menu/conversation_header_menu_audio: flags=0x00000000
-              spec resource 0x7f110001 io.appium.test:menu/conversation_header_menu_collection: flags=0x00000000
-              spec resource 0x7f110002 io.appium.test:menu/conversation_header_menu_collection_searching: flags=0x00000000
-              spec resource 0x7f110003 io.appium.test:menu/conversation_header_menu_video: flags=0x00000000
-              spec resource 0x7f110004 io.appium.test:menu/conversation_multiuse: flags=0x00000000
-              spec resource 0x7f110005 io.appium.test:menu/toolbar_close_white: flags=0x00000000
-              spec resource 0x7f110006 io.appium.test:menu/toolbar_collection: flags=0x00000000
-              spec resource 0x7f110007 io.appium.test:menu/toolbar_sketch: flags=0x00000000
-              config (default):
-                resource 0x7f110000 io.appium.test:menu/conversation_header_menu_audio: t=0x03 d=0x000000b6 (s=0x0008 r=0x00)
-                  (string8) "res/menu/conversation_header_menu_audio.xml"
-                resource 0x7f110001 io.appium.test:menu/conversation_header_menu_collection: t=0x03 d=0x000000b7 (s=0x0008 r=0x00)
-                  (string8) "res/menu/conversation_header_menu_collection.xml"
-                resource 0x7f110002 io.appium.test:menu/conversation_header_menu_collection_searching: t=0x03 d=0x000000b8 (s=0x0008 r=0x00)
-                  (string8) "res/menu/conversation_header_menu_collection_searching.xml"
-                resource 0x7f110003 io.appium.test:menu/conversation_header_menu_video: t=0x03 d=0x000000b9 (s=0x0008 r=0x00)
-                  (string8) "res/menu/conversation_header_menu_video.xml"
-                resource 0x7f110004 io.appium.test:menu/conversation_multiuse: t=0x03 d=0x000000ba (s=0x0008 r=0x00)
-                  (string8) "res/menu/conversation_multiuse.xml"
-                resource 0x7f110005 io.appium.test:menu/toolbar_close_white: t=0x03 d=0x000000bb (s=0x0008 r=0x00)
-                  (string8) "res/menu/toolbar_close_white.xml"
-                resource 0x7f110006 io.appium.test:menu/toolbar_collection: t=0x03 d=0x000000bc (s=0x0008 r=0x00)
-                  (string8) "res/menu/toolbar_collection.xml"
-                resource 0x7f110007 io.appium.test:menu/toolbar_sketch: t=0x03 d=0x0000007f (s=0x0008 r=0x00)
-                  (string8) "res/menu/toolbar_sketch.xml"
-        `});
-      mocks.fs.expects('writeFile').once();
-      const {apkStrings, localPath} = await adb.extractStringsFromApk('/fake/path.apk', 'de-DE', '/tmp');
-      apkStrings.abc_action_bar_home_description.should.eql('Navigate "home"');
-      apkStrings.calling__conversation_full__message.should.eql([
-        'Calls work in conversations with up to 1 person.',
-        'Calls work in conversations with up to %1$d people. "blabla"',
-      ]);
-      localPath.should.eql(path.resolve('/tmp', 'strings.json'));
     });
   });
 
@@ -470,6 +340,10 @@ describe('Apk-utils', withMocks({adb, fs, teen_process}, function (mocks) {
           .map((x) => `${x}.apk`)
           .join('\r\n')
         );
+      mocks.adb.expects('shell')
+        .once()
+        .withExactArgs(['touch', '-am', '/data/local/tmp/appium_cache/1.apk'])
+        .returns(B.resolve());
       mocks.fs.expects('hash')
         .withExactArgs(apkPath)
         .returns('1');
@@ -594,6 +468,44 @@ describe('Apk-utils', withMocks({adb, fs, teen_process}, function (mocks) {
       mocks.adb.expects('shell')
         .returns('');
       (await adb.startApp(startAppOptions));
+    });
+    it('should call getApiLevel and shell with correct arguments when activity is intent', async function () {
+      const startAppOptionsWithIntent = {
+        pkg: 'pkg',
+        action: 'android.intent.action.VIEW',
+        category: 'android.intent.category.DEFAULT',
+        optionalIntentArguments: '-d scheme://127.0.0.1'
+      };
+      const cmdWithIntent = ['am', 'start', '-W', '-S', '-a', 'android.intent.action.VIEW', '-c', 'android.intent.category.DEFAULT', '-d', 'scheme://127.0.0.1'];
+
+      mocks.adb.expects('getApiLevel')
+        .once().withExactArgs()
+        .returns(17);
+      mocks.adb.expects('shell')
+        .once().withArgs(cmdWithIntent)
+        .returns('');
+      (await adb.startApp(startAppOptionsWithIntent));
+    });
+    it('should throw error when action provided, but pkg not provided', async function () {
+      const startAppOptionsWithoutPkg = {
+        action: 'android.intent.action.VIEW'
+      };
+      await adb.startApp(startAppOptionsWithoutPkg).should.eventually.be.rejectedWith(
+        `pkg, and activity or intent action, are required to start an application`);
+    });
+    it('should throw error when activity provided, but pkg not provided', async function () {
+      const startAppOptionsWithoutPkg = {
+        activity: '.MainActivity'
+      };
+      await adb.startApp(startAppOptionsWithoutPkg).should.eventually.be.rejectedWith(
+        `pkg, and activity or intent action, are required to start an application`);
+    });
+    it('should throw error when neither action nor activity provided', async function () {
+      const startAppOptionsWithoutActivityOrAction = {
+        pkg: 'pkg'
+      };
+      await adb.startApp(startAppOptionsWithoutActivityOrAction).should.eventually.be.rejectedWith(
+        `pkg, and activity or intent action, are required to start an application`);
     });
     it('should call getApiLevel and shell with correct arguments when activity is inner class', async function () {
       const startAppOptionsWithInnerClass = { pkg: 'pkg', activity: 'act$InnerAct'},
@@ -838,72 +750,7 @@ describe('Apk-utils', withMocks({adb, fs, teen_process}, function (mocks) {
       await adb.setDeviceLanguageCountry(language);
     });
   });
-  describe('getApkInfo', function () {
-    const APK_INFO = `package: name='io.appium.settings' versionCode='2' versionName='1.1' platformBuildVersionName='6.0-2166767'
-    sdkVersion:'17'
-    targetSdkVersion:'23'
-    uses-permission: name='android.permission.INTERNET'
-    uses-permission: name='android.permission.CHANGE_NETWORK_STATE'
-    uses-permission: name='android.permission.ACCESS_NETWORK_STATE'
-    uses-permission: name='android.permission.READ_PHONE_STATE'
-    uses-permission: name='android.permission.WRITE_SETTINGS'
-    uses-permission: name='android.permission.CHANGE_WIFI_STATE'
-    uses-permission: name='android.permission.ACCESS_WIFI_STATE'
-    uses-permission: name='android.permission.ACCESS_FINE_LOCATION'
-    uses-permission: name='android.permission.ACCESS_COARSE_LOCATION'
-    uses-permission: name='android.permission.ACCESS_MOCK_LOCATION'
-    application-label:'Appium Settings'
-    application-icon-120:'res/drawable-ldpi-v4/ic_launcher.png'
-    application-icon-160:'res/drawable-mdpi-v4/ic_launcher.png'
-    application-icon-240:'res/drawable-hdpi-v4/ic_launcher.png'
-    application-icon-320:'res/drawable-xhdpi-v4/ic_launcher.png'
-    application: label='Appium Settings' icon='res/drawable-mdpi-v4/ic_launcher.png'
-    application-debuggable
-    launchable-activity: name='io.appium.settings.Settings'  label='Appium Settings' icon=''
-    feature-group: label=''
-      uses-feature: name='android.hardware.wifi'
-      uses-feature: name='android.hardware.location'
-      uses-implied-feature: name='android.hardware.location' reason='requested android.permission.ACCESS_COARSE_LOCATION permission, requested android.permission.ACCESS_FINE_LOCATION permission, and requested android.permission.ACCESS_MOCK_LOCATION permission'
-      uses-feature: name='android.hardware.location.gps'
-      uses-implied-feature: name='android.hardware.location.gps' reason='requested android.permission.ACCESS_FINE_LOCATION permission'
-      uses-feature: name='android.hardware.location.network'
-      uses-implied-feature: name='android.hardware.location.network' reason='requested android.permission.ACCESS_COARSE_LOCATION permission'
-      uses-feature: name='android.hardware.touchscreen'
-      uses-implied-feature: name='android.hardware.touchscreen' reason='default feature for all apps'
-    main
-    other-receivers
-    other-services
-    supports-screens: 'small' 'normal' 'large' 'xlarge'
-    supports-any-density: 'true'
-    locales: '--_--'
-    densities: '120' '160' '240' '320'`;
 
-    it('should properly parse apk info', async function () {
-      mocks.fs.expects('exists').once().returns(true);
-      mocks.adb.expects('initAapt').once().returns(true);
-      mocks.teen_process.expects('exec').once().returns({stdout: APK_INFO});
-      const result = await adb.getApkInfo('/some/folder/path.apk');
-      for (let [name, value] of [
-        ['name', 'io.appium.settings'],
-        ['versionCode', 2],
-        ['versionName', '1.1']]) {
-        result.should.have.property(name, value);
-      }
-    });
-    it('should extract base apk first in order to retrieve apks info', async function () {
-      mocks.adb.expects('extractBaseApk').once().returns('/some/otherfolder/path.apk');
-      mocks.fs.expects('exists').once().returns(true);
-      mocks.adb.expects('initAapt').once().returns(true);
-      mocks.teen_process.expects('exec').once().returns({stdout: APK_INFO});
-      const result = await adb.getApkInfo('/some/folder/path.apks');
-      for (let [name, value] of [
-        ['name', 'io.appium.settings'],
-        ['versionCode', 2],
-        ['versionName', '1.1']]) {
-        result.should.have.property(name, value);
-      }
-    });
-  });
   describe('getPackageInfo', function () {
     it('should properly parse installed package info', async function () {
       mocks.adb.expects('shell').once().returns(`Packages:

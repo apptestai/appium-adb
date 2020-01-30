@@ -7,6 +7,7 @@ import Logcat from '../../lib/logcat.js';
 import * as teen_process from 'teen_process';
 import { withMocks } from 'appium-test-support';
 import _ from 'lodash';
+import { EOL } from 'os';
 
 
 chai.use(chaiAsPromised);
@@ -592,6 +593,9 @@ describe('adb commands', withMocks({adb, logcat, teen_process, net}, function (m
       });
     });
     describe('getPIDsByName', function () {
+      beforeEach(function () {
+        mocks.adb.expects('getApiLevel').once().returns(23);
+      });
       afterEach(function () {
         adb._isPidofAvailable = undefined;
         adb._isPgrepAvailable = undefined;
@@ -608,7 +612,8 @@ describe('adb commands', withMocks({adb, logcat, teen_process, net}, function (m
         adb._isPidofAvailable = false;
         adb._isPgrepAvailable = true;
         mocks.adb.expects('shell')
-          .once().withExactArgs(['pgrep', `^${_.escapeRegExp(contactManagerPackage.slice(-15))}$`])
+          .once()
+          .withExactArgs([`pgrep ^${_.escapeRegExp(contactManagerPackage.slice(-15))}$ || pgrep ^${_.escapeRegExp(contactManagerPackage.slice(0, 15))}$`])
           .returns('5078\n5079\n');
         (await adb.getPIDsByName(contactManagerPackage)).should.eql([5078, 5079]);
       });
@@ -778,7 +783,8 @@ describe('adb commands', withMocks({adb, logcat, teen_process, net}, function (m
           .concat(['shell', 'am', 'instrument', '-e', 'coverage', 'true', '-w'])
           .concat([instrumentClass]);
         mocks.teen_process.expects('SubProcess')
-          .once().withExactArgs('dummy_adb_path', args)
+          .withArgs('dummy_adb_path', args)
+          .onFirstCall()
           .returns(conn);
         mocks.adb.expects('waitForActivity')
           .once().withExactArgs(waitPkg, waitActivity)
@@ -1200,6 +1206,18 @@ describe('adb commands', withMocks({adb, logcat, teen_process, net}, function (m
         .withArgs(['settings', 'get', 'namespace', 'setting'])
         .returns('value');
       (await adb.getSetting('namespace', 'setting')).should.be.equal('value');
+    });
+  });
+  describe('getCurrentTimeZone', function () {
+    it('should call shell with correct args', async function () {
+      mocks.adb.expects('shell')
+        .once().withExactArgs(['getprop', 'persist.sys.timezone'])
+        .returns(`Asia/Tokyo${EOL}`);
+      (await adb.getTimeZone()).should.equal('Asia/Tokyo');
+    });
+    it('should raise an error', async function () {
+      mocks.adb.expects('shell').throws();
+      await adb.getTimeZone().should.eventually.be.rejected;
     });
   });
 }));
