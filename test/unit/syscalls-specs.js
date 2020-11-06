@@ -4,7 +4,6 @@ import ADB from '../..';
 import * as teen_process from 'teen_process';
 import { withMocks } from 'appium-test-support';
 import B from 'bluebird';
-import _ from 'lodash';
 
 
 chai.use(chaiAsPromised);
@@ -123,31 +122,10 @@ describe('System calls', withMocks({adb, B, teen_process}, function (mocks) {
     mocks.verify();
   });
 
-  it('should return adb version', async function () {
-    mocks.adb.expects('adbExec')
-      .once()
-      .withExactArgs('version')
-      .returns('Android Debug Bridge version 1.0.39\nRevision 5943271ace17-android');
-    let adbVersion = await adb.getAdbVersion();
-    adbVersion.versionString.should.equal('1.0.39');
-    adbVersion.versionFloat.should.be.within(1.0, 1.0);
-    adbVersion.major.should.equal(1);
-    adbVersion.minor.should.equal(0);
-    adbVersion.patch.should.equal(39);
-  });
-  it('should cache adb results', async function () {
-    adb.getAdbVersion.cache = new _.memoize.Cache();
-    mocks.adb.expects('adbExec')
-      .once()
-      .withExactArgs('version')
-      .returns('Android Debug Bridge version 1.0.39\nRevision 5943271ace17-android');
-    await adb.getAdbVersion();
-    await adb.getAdbVersion();
-  });
-  it('fileExists should return true for if ls returns', async function () {
-    mocks.adb.expects('ls')
-      .once().withExactArgs('foo')
-      .returns(['bar']);
+  it('fileExists should return true if file/dir exists', async function () {
+    mocks.adb.expects('shell')
+      .once().withExactArgs([`[ -e 'foo' ] && echo __PASS__`])
+      .returns('__PASS__');
     await adb.fileExists('foo').should.eventually.equal(true);
   });
   it('ls should return list', async function () {
@@ -232,8 +210,8 @@ describe('System calls', withMocks({adb, B, teen_process}, function (mocks) {
         .returns([emulator]);
       mocks.adb.expects('setEmulatorPort')
         .once().withExactArgs(port);
-      mocks.adb.expects('sendTelnetCommand')
-        .once().withExactArgs('avd name')
+      mocks.adb.expects('execEmuConsoleCommand')
+        .once()
         .returns(avdName);
       mocks.adb.expects('setDeviceId')
         .once().withExactArgs(udid);
@@ -248,8 +226,8 @@ describe('System calls', withMocks({adb, B, teen_process}, function (mocks) {
         .returns([emulator]);
       mocks.adb.expects('setEmulatorPort')
         .once().withExactArgs(port);
-      mocks.adb.expects('sendTelnetCommand')
-        .once().withExactArgs('avd name')
+      mocks.adb.expects('execEmuConsoleCommand')
+        .once()
         .returns('OTHER_AVD');
       chai.expect(await adb.getRunningAVD(avdName)).to.be.null;
     });
@@ -272,7 +250,7 @@ describe('System calls', withMocks({adb, B, teen_process}, function (mocks) {
           stderr: 'adb: unable to connect for root: closed\n',
           code: 1
         });
-      mocks.adb.expects('restartAdb').once();
+      mocks.adb.expects('reconnect').once();
       await adb.root().should.eventually.eql({isSuccessful: false, wasAlreadyRooted: false});
     });
     it('should not restart adb if root throws err but stderr does not contain "closed" in message', async function () {
@@ -285,7 +263,7 @@ describe('System calls', withMocks({adb, B, teen_process}, function (mocks) {
           stderr: 'some error that does not close device',
           code: 1
         });
-      mocks.adb.expects('restartAdb').never();
+      mocks.adb.expects('reconnect').never();
       await adb.root().should.eventually.eql({isSuccessful: false, wasAlreadyRooted: false});
     });
     it('should call "unroot" on shell if call .unroot', async function () {

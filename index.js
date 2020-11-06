@@ -2,8 +2,12 @@
 
 import * as adb from './lib/adb';
 
-
-const { ADB, DEFAULT_ADB_PORT } = adb;
+const {
+  ADB,
+  DEFAULT_ADB_PORT,
+  getAndroidBinaryPath,
+  getSdkRootFromEnv
+} = adb;
 
 export default ADB;
-export { DEFAULT_ADB_PORT, ADB };
+export { ADB, DEFAULT_ADB_PORT, getAndroidBinaryPath, getSdkRootFromEnv };

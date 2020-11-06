@@ -624,9 +624,8 @@ describe('adb commands', withMocks({adb, logcat, teen_process, net}, function (m
     });
     describe('getNameByPid', function () {
       it('should get package name from valid ps output', async function () {
-        mocks.adb.expects('shell')
-          .once().withExactArgs(['ps'])
-          .returns(`
+        mocks.adb.expects('listProcessStatus')
+          .once().returns(`
           USER     PID   PPID  VSIZE  RSS     WCHAN    PC        NAME
           radio     929   69    1228184 40844 ffffffff b6db0920 S com.android.phone
           radio     930   69    1228184 40844 ffffffff b6db0920 S com.android.phone
@@ -653,9 +652,8 @@ describe('adb commands', withMocks({adb, logcat, teen_process, net}, function (m
         await adb.getNameByPid('bla').should.eventually.be.rejectedWith(/valid number/);
       });
       it('should fail if no PID could be found in ps output', async function () {
-        mocks.adb.expects('shell')
-          .once().withExactArgs(['ps'])
-          .returns(`
+        mocks.adb.expects('listProcessStatus')
+          .once().returns(`
           USER     PID   PPID  VSIZE  RSS     WCHAN    PC        NAME
           u0_a12    1156  69    1246756 58588 ffffffff b6db0920 S com.android.systemui
           `);
@@ -700,9 +698,8 @@ describe('adb commands', withMocks({adb, logcat, teen_process, net}, function (m
       it('should fall back to ps if pidof is not available', async function () {
         adb._isPidofAvailable = false;
         adb._isPgrepAvailable = false;
-        mocks.adb.expects('shell')
-          .once().withExactArgs(['ps'])
-          .returns(`
+        mocks.adb.expects('listProcessStatus')
+          .once().returns(`
           USER     PID   PPID  VSIZE  RSS     WCHAN    PC        NAME
           radio     929   69    1228184 40844 ffffffff b6db0920 S com.android.phone
           radio     930   69    1228184 40844 ffffffff b6db0920 S com.android.phone
@@ -728,9 +725,8 @@ describe('adb commands', withMocks({adb, logcat, teen_process, net}, function (m
       it('should fall back to ps and return empty list if no processes were found', async function () {
         adb._isPidofAvailable = false;
         adb._isPgrepAvailable = false;
-        mocks.adb.expects('shell')
-          .once().withExactArgs(['ps'])
-          .returns(`
+        mocks.adb.expects('listProcessStatus')
+          .once().returns(`
           USER     PID   PPID  VSIZE  RSS     WCHAN    PC        NAME
           radio     929   69    1228184 40844 ffffffff b6db0920 S com.android.phone
           radio     930   69    1228184 40844 ffffffff b6db0920 S com.android.phone
@@ -744,9 +740,8 @@ describe('adb commands', withMocks({adb, logcat, teen_process, net}, function (m
       it('should properly parse different ps output formats', async function () {
         adb._isPidofAvailable = false;
         adb._isPgrepAvailable = false;
-        mocks.adb.expects('shell')
-          .once().withExactArgs(['ps'])
-          .returns(`
+        mocks.adb.expects('listProcessStatus')
+          .once().returns(`
           USER           PID  PPID     VSZ    RSS WCHAN            ADDR S NAME
           shell        21989 32761    4952   2532 sigsuspend   b2f1d778 S sh
           shell        21992 21989    5568   3016 0            b4396448 R ps
@@ -770,41 +765,8 @@ describe('adb commands', withMocks({adb, logcat, teen_process, net}, function (m
 
       it('should call kill process correctly', async function () {
         mocks.adb.expects('shell')
-          .once().withExactArgs(['kill', '-0', pid])
+          .once().withExactArgs(['kill', pid])
           .returns('');
-        mocks.adb.expects('shell')
-          .withExactArgs(['kill', pid])
-          .twice()
-          .onCall(0)
-          .returns('')
-          .onCall(1)
-          .throws();
-        await adb.killProcessByPID(pid);
-      });
-
-      it('should force kill process if normal kill fails', async function () {
-        mocks.adb.expects('shell')
-          .once().withExactArgs(['kill', '-0', pid])
-          .returns('');
-        mocks.adb.expects('shell')
-          .atLeast(2).withExactArgs(['kill', pid])
-          .returns('');
-        mocks.adb.expects('shell')
-          .once().withExactArgs(['kill', '-9', pid])
-          .returns('');
-        await adb.killProcessByPID(pid);
-      });
-
-      it('should not throw an error if a process with given ID does not exist', async function () {
-        mocks.adb.expects('root')
-          .never();
-        mocks.adb.expects('unroot')
-          .never();
-        const error = new Error('yolo');
-        error.stderr = 'No such process';
-        mocks.adb.expects('shell')
-          .once().withExactArgs(['kill', '-0', pid])
-          .throws(error);
         await adb.killProcessByPID(pid);
       });
     });
@@ -1155,79 +1117,6 @@ describe('adb commands', withMocks({adb, logcat, teen_process, net}, function (m
       ]) {
         result.should.include(perm);
       }
-    });
-  });
-  describe('sendTelnetCommand', function () {
-    it('should call shell with correct args', async function () {
-      const port = 54321;
-      let conn = new events.EventEmitter();
-      let commands = [];
-      conn.write = function (command) {
-        commands.push(command);
-      };
-      mocks.adb.expects('getEmulatorPort')
-        .once().withExactArgs()
-        .returns(port);
-      mocks.net.expects('createConnection')
-        .once().withExactArgs(port, 'localhost')
-        .returns(conn);
-      let p = adb.sendTelnetCommand('avd name');
-      setTimeout(function () {
-        conn.emit('connect');
-        conn.emit('data', 'OK');
-        conn.emit('data', 'OK');
-        conn.emit('close');
-      }, 0);
-      await p;
-      commands[0].should.equal('avd name\n');
-      commands[1].should.equal('quit\n');
-    });
-    it('should return the last line of the output only', async function () {
-      const port = 54321;
-      let conn = new events.EventEmitter();
-      let commands = [];
-      let expected = 'desired_command_output';
-      conn.write = function (command) {
-        commands.push(command);
-      };
-      mocks.adb.expects('getEmulatorPort')
-        .once().withExactArgs()
-        .returns(port);
-      mocks.net.expects('createConnection')
-        .once().withExactArgs(port, 'localhost')
-        .returns(conn);
-      let p = adb.sendTelnetCommand('avd name');
-      setTimeout(function () {
-        conn.emit('connect');
-        conn.emit('data', 'OK');
-        conn.emit('data', 'OK\nunwanted_echo_output\n' + expected);
-        conn.emit('close');
-      }, 0);
-      let actual = await p;
-      (actual).should.equal(expected);
-    });
-    it('should throw error if network connection errors', async function () {
-      const port = 54321;
-      let conn = new events.EventEmitter();
-      let commands = [];
-      let expected = 'desired_command_output';
-      conn.write = function (command) {
-        commands.push(command);
-      };
-      mocks.adb.expects('getEmulatorPort')
-        .once().withExactArgs()
-        .returns(port);
-      mocks.net.expects('createConnection')
-        .once().withExactArgs(port, 'localhost')
-        .returns(conn);
-      let p = adb.sendTelnetCommand('avd name');
-      setTimeout(function () {
-        conn.emit('connect');
-        conn.emit('data', 'OK');
-        conn.emit('data', 'OK\nunwanted_echo_output\n' + expected);
-        conn.emit('error', new Error('ouch!'));
-      }, 0);
-      await p.should.eventually.be.rejectedWith(/ouch/);
     });
   });
   it('isValidClass should correctly validate class names', function () {

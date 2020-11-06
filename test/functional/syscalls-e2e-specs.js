@@ -5,6 +5,7 @@ import { apiLevel, avdName, MOCHA_TIMEOUT, MOCHA_LONG_TIMEOUT } from './setup';
 import path from 'path';
 import { rootDir } from '../../lib/helpers.js';
 import { fs } from 'appium-support';
+import _ from 'lodash';
 
 const DEFAULT_CERTIFICATE = path.resolve(rootDir, 'keys', 'testkey.x509.pem');
 
@@ -54,8 +55,8 @@ describe('System calls', function () {
     await adb.waitForDevice(2);
   });
   it('reboot should reboot the device', async function () {
-    if (process.env.TRAVIS) {
-      // The test is very slow on CI
+    if (process.env.CI) {
+      // The test makes CI unstable
       return this.skip();
     }
     this.timeout(MOCHA_LONG_TIMEOUT);
@@ -68,14 +69,23 @@ describe('System calls', function () {
   });
   it('fileExists should detect when files do and do not exist', async function () {
     (await adb.fileExists('/foo/bar/baz.zip')).should.be.false;
-    (await adb.fileExists('/system/')).should.be.true;
+    (await adb.fileExists('/data/local/tmp')).should.be.true;
   });
   it('ls should list files', async function () {
     (await adb.ls('/foo/bar')).should.eql([]);
-    (await adb.ls('/system/')).should.contain('etc');
+    await adb.shell(['touch', '/data/local/tmp/test']);
+    (await adb.ls('/data/local/tmp')).should.contain('test');
   });
   it('should check if the given certificate is already installed', async function () {
     const certBuffer = await fs.readFile(DEFAULT_CERTIFICATE);
     (await adb.isMitmCertificateInstalled(certBuffer)).should.be.false;
+  });
+  it('should return version', async function () {
+    const {binary, bridge} = await adb.getVersion();
+    if (binary) {
+      _.has(binary, 'version').should.be.true;
+      _.has(binary, 'build').should.be.true;
+    }
+    _.has(bridge, 'version').should.be.true;
   });
 });

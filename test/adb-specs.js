@@ -15,9 +15,7 @@ describe.skip('ADB To be implemented methods', function () {
   // it('sign', async () => { });
   // it('zipAlignApk', async () => { });
   // it('checkApkCert', async () => { });
-  // it('checkCustomApkCert', async () => { });
-  // it('getKeystoreMd5', async () => { });
-  // it('checkApkKeystoreMatch', async () => { });
+  // it('getKeystoreHash', async () => { });
   // it('getDevicesWithRetry', async () => { });
   // it('getApiLevel', async () => { });
   // it('getEmulatorPort', async () => { });
@@ -73,7 +71,6 @@ describe.skip('ADB To be implemented methods', function () {
   // it('keyevent', async () => { });
   // it('isScreenLocked', async () => { });
   // it('isSoftKeyboardPresent', async () => { });
-  // it('sendTelnetCommand', async () => { });
   // it('isEmulator', async () => { });
   // it('isAirplaneModeOn', async () => { });
   // it('setAirplaneMode', async () => { });
